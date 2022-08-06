@@ -128,7 +128,7 @@ const LANG: &str = "rust";
 /// must be provided using `Options::tls_client_config`.
 pub use tokio_rustls::rustls;
 
-pub use async_nats_subject::*;
+pub use nats_subject_derive::*;
 pub use subject::{SubjectBuf, ToSubject};
 
 use connection::Connection;
