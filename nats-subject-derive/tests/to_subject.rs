@@ -13,7 +13,7 @@ fn simple_to_subject() -> Result<(), Error> {
 }
 
 #[derive(Debug, ToSubject)]
-#[subject("hi.{}.age.{}", name, number)]
+#[subject("hi.{ name }.age.{ number }")]
 struct WithFields {
     name: String,
     number: u32,
@@ -21,7 +21,10 @@ struct WithFields {
 
 #[test]
 fn fields_to_subject() -> Result<(), Error> {
-    let with_fields = WithFields {name: "peter".to_string(), number: 42};
+    let with_fields = WithFields {
+        name: "peter".to_string(),
+        number: 42,
+    };
     let expected = subj!("hi.{}.age.{}", "peter", 42)?;
     let from_derive = with_fields.to_subject()?;
     assert_eq!(expected, from_derive);
