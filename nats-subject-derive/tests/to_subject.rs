@@ -13,7 +13,7 @@ fn simple_to_subject() -> Result<(), Error> {
 }
 
 #[derive(Debug, ToSubject)]
-#[subject("hi.{ name }.age.{ number }")]
+#[subject("hi.[ name ].age.[ number ]")]
 struct WithFields {
     name: String,
     number: u32,

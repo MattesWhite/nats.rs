@@ -64,7 +64,7 @@ impl Parse for SubjectTemplate {
 
         for token in template.split_terminator('.') {
             let token = match token {
-                ident if ident.starts_with("{ ") && ident.ends_with(" }") => {
+                ident if ident.starts_with("[ ") && ident.ends_with(" ]") => {
                     let ident = ident[1..ident.len() - 2].trim();
                     if ident.contains(WHITESPACE) {
                         return Err(syn::Error::new(
@@ -76,7 +76,7 @@ impl Parse for SubjectTemplate {
                 }
                 token => {
                     if token.contains(WHITESPACE) {
-                        if token.starts_with('{') || token.ends_with('}') {
+                        if token.starts_with('[') || token.ends_with(']') {
                             return Err(syn::Error::new(
                                 subject_template.span(),
                                 "Tokens may not include whitespace, did you intend to use a placeholder here?",
