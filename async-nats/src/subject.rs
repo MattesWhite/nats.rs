@@ -48,6 +48,10 @@ pub enum FromSubjectError {
         /// The value that was tried to parse.
         token: String,
     },
+    #[error("Expected at least {expected} tokens but only got {got}")]
+    ExpectedMoreTokens { expected: usize, got: usize },
+    #[error("Expected token '{expected}' but got '{got}'")]
+    TokenMismatch { expected: String, got: String },
 }
 
 impl FromSubjectError {
@@ -95,7 +99,7 @@ pub trait ToSubject {
 
 /// An instance can be parsed from a [`Subject`].
 pub trait FromSubject: Sized {
-    fn from_subject(subject: &Subject) -> Result<Self, Error>;
+    fn from_subject(subject: &Subject) -> Result<Self, FromSubjectError>;
 }
 
 /// A valid NATS subject.

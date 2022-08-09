@@ -61,6 +61,15 @@ impl SubjectTemplate {
         }
         args
     }
+    pub fn fields(&self) -> Punctuated<Ident, Token![,]> {
+        self.tokens()
+            .iter()
+            .filter_map(|t| match t {
+                TemplateToken::Token(_) => None,
+                TemplateToken::Field(ident) => Some(ident.clone()),
+            })
+            .collect()
+    }
 }
 
 impl Parse for SubjectTemplate {

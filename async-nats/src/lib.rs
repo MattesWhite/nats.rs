@@ -129,7 +129,7 @@ const LANG: &str = "rust";
 pub use tokio_rustls::rustls;
 
 pub use nats_subject_derive::*;
-pub use subject::{SubjectBuf, ToSubject};
+pub use subject::{FromSubject, Subject, SubjectBuf, ToSubject};
 
 use connection::Connection;
 use connector::{Connector, ConnectorOptions};
