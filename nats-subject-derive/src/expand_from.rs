@@ -14,8 +14,8 @@ pub fn expand_derive_from_subject(input: &mut DeriveInput) -> Result<TokenStream
     let mut token_checks = TokenStream::new();
     let mut first = true;
     for token in subject_template.tokens().iter() {
-        let check_stream = token_check(first, token, token_cnt)?;
-        token_checks.extend(check_stream);
+        let check = check_or_parse(first, token, token_cnt)?;
+        token_checks.extend(check);
         first = false;
     }
 
@@ -33,41 +33,42 @@ pub fn expand_derive_from_subject(input: &mut DeriveInput) -> Result<TokenStream
     })
 }
 
-fn token_check(first: bool, token: &TemplateToken, token_cnt: usize) -> Result<TokenStream> {
-    let mut check = TokenStream::new();
-
-    if !first {
-        // increase token counter
-        check.extend(quote! { token_cnt += 1; });
-    }
-    // Get the current token
-    check.extend(quote! {
+fn check_or_parse(first: bool, token: &TemplateToken, token_cnt: usize) -> Result<TokenStream> {
+    let increase_token_cnt = if first {
+        TokenStream::new()
+    } else {
+        quote! { token_cnt += 1; }
+    };
+    let current_token = quote! {
         let cur_token = tokens.next().ok_or(::async_nats::subject::FromSubjectError::ExpectedMoreTokens {
             expected: #token_cnt,
             got: token_cnt,
         })?;
-    });
-    // Parse or check token
-    match token {
+    };
+    let check_or_parse = match token {
         TemplateToken::Token(check_token) => {
             let check_token = LitStr::new(&check_token, Span::call_site());
-            check.extend(quote! {
+            quote! {
                 if cur_token != #check_token {
                     return Err(::async_nats::subject::FromSubjectError::TokenMismatch {
                         expected: #check_token.to_string(),
                         got: cur_token.to_string(),
                     });
                 }
-            });
+            }
         }
         TemplateToken::Field(field) => {
-            check.extend(quote! {
+            quote! {
                 let #field = cur_token
                     .parse()
                     .map_err(|e| ::async_nats::subject::FromSubjectError::parser_err(e, stringify!(#field), cur_token))?;
-            })
-        },
-    }
+            }
+        }
+    };
 
-    Ok(check)
+    Ok(quote! {
+        #increase_token_cnt
+        #current_token
+        #check_or_parse
+    })
 }
