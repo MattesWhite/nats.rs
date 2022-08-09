@@ -68,7 +68,7 @@ impl FromSubjectError {
 }
 
 /// Errors validating a NATS subject.
-#[derive(Debug, Copy, Clone, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
     /// One of the [`Subject`]'s token is invalid.
@@ -84,6 +84,8 @@ pub enum Error {
     /// [`Subject`].
     #[error("Could not join on a subject ending with the multi wildcard")]
     CanNotJoin,
+    #[error(transparent)]
+    FailedToParse(#[from] FromSubjectError),
 }
 
 impl From<Error> for io::Error {
