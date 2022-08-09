@@ -53,13 +53,16 @@ impl SubjectTemplate {
         LitStr::new(&format_template, self.span.clone())
     }
     pub fn format_args(&self) -> Punctuated<Expr, Token![,]> {
-        let mut args = Punctuated::new();
-        for token in self.tokens.iter() {
-            if let TemplateToken::Field(ident) = token {
-                args.push(parse_quote! { self.#ident });
-            }
-        }
-        args
+        self.tokens()
+            .iter()
+            .filter_map(|t| match t {
+                TemplateToken::Token(_) => None,
+                TemplateToken::Field(ident) => {
+                    let expr: Expr = parse_quote!( self.#ident );
+                    Some(expr)
+                }
+            })
+            .collect()
     }
     pub fn fields(&self) -> Punctuated<Ident, Token![,]> {
         self.tokens()
