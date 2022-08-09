@@ -35,7 +35,7 @@ impl SubjectTemplate {
     pub fn tokens(&self) -> &[TemplateToken] {
         &self.tokens
     }
-    /// Construct a string literal for a format token.
+    /// Construct a string literal for the format macro.
     pub fn format_template(&self) -> LitStr {
         let mut format_template = String::new();
         let mut push_point = false;
