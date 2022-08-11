@@ -1,6 +1,6 @@
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, LitStr, Result};
+use syn::{DeriveInput, Result};
 
 use crate::subject_template::{subject_attr, SubjectTemplate, TemplateToken};
 
@@ -8,22 +8,29 @@ pub fn expand_derive_from_subject(input: &mut DeriveInput) -> Result<TokenStream
     let type_ident = &input.ident;
     let sub_attr = subject_attr(&input)?;
     let subject_template = sub_attr.parse_args::<SubjectTemplate>()?;
-    let token_cnt = subject_template.tokens().len();
-    let fields = subject_template.fields();
 
     let mut token_checks = TokenStream::new();
-    let mut first = true;
-    for token in subject_template.tokens().iter() {
-        let check = check_or_parse(first, token, token_cnt)?;
+    let mut tokens = subject_template.tokens().iter();
+    let mut current_token = tokens
+        .next()
+        .expect("ensured by SubjectTemplate constructor");
+    let mut next_token = tokens.next();
+    loop {
+        let check = check_or_parse(current_token, next_token)?;
         token_checks.extend(check);
-        first = false;
+        if let Some(token) = next_token {
+            current_token = token;
+            next_token = tokens.next();
+        } else {
+            break;
+        }
     }
 
+    let fields = subject_template.fields();
     Ok(quote! {
         impl ::async_nats::subject::FromSubject for #type_ident {
             fn from_subject(subject: &::async_nats::Subject) -> Result<Self, ::async_nats::subject::FromSubjectError> {
-                let mut tokens = subject.tokens();
-                let mut token_cnt = 0;
+                let mut idx = 0;
 
                 #token_checks
 
@@ -33,42 +40,72 @@ pub fn expand_derive_from_subject(input: &mut DeriveInput) -> Result<TokenStream
     })
 }
 
-fn check_or_parse(first: bool, token: &TemplateToken, token_cnt: usize) -> Result<TokenStream> {
-    let increase_token_cnt = if first {
-        TokenStream::new()
-    } else {
-        quote! { token_cnt += 1; }
-    };
-    let current_token = quote! {
-        let cur_token = tokens.next().ok_or(::async_nats::subject::FromSubjectError::ExpectedMoreTokens {
-            expected: #token_cnt,
-            got: token_cnt,
-        })?;
-    };
-    let check_or_parse = match token {
-        TemplateToken::Token(check_token) => {
-            let check_token = LitStr::new(&check_token, Span::call_site());
+fn check_or_parse(token: &TemplateToken, next: Option<&TemplateToken>) -> Result<TokenStream> {
+    let idx_and_sub = match (token, next) {
+        (
+            TemplateToken::MultiField(ident),
+            Some(TemplateToken::MultiField(_) | TemplateToken::SingleField(_)),
+        ) => {
+            return Err(syn::Error::new(
+                ident.span(),
+                "Multi-field placeholders next to each other are indistinguishable",
+            ));
+        }
+        (TemplateToken::MultiField(_), Some(TemplateToken::Token(token))) => {
+            let pattern = format!(".{token}.");
             quote! {
-                if cur_token != #check_token {
+                idx = subject.rfind(#pattern).ok_or_else(|| ::async_nats::subject::FromSubjectError::SubjectEndedUnexpected {
+                    wanted: #token.to_string(),
+                })?;
+                let sub = &subject[..idx];
+            }
+        }
+        (TemplateToken::SingleField(_) | TemplateToken::Token(_), Some(_)) => {
+            quote! {
+                idx = subject
+                    .rfind('.')
+                    .ok_or_else(|| ::async_nats::subject::FromSubjectError::SubjectEndedUnexpected {
+                        wanted: ".".to_string(),
+                    })?;
+                let sub = &subject[..idx];
+            }
+        }
+        (_, None) => {
+            quote! {
+                let sub = subject;
+            }
+        }
+    };
+    let parse_or_check = match token {
+        TemplateToken::Token(t) => {
+            quote! {
+                if sub != #t {
                     return Err(::async_nats::subject::FromSubjectError::TokenMismatch {
-                        expected: #check_token.to_string(),
-                        got: cur_token.to_string(),
+                        expected: #t.to_string(),
+                        got: sub.to_string(),
                     });
                 }
             }
         }
-        TemplateToken::Field(field) => {
+        TemplateToken::MultiField(ident) | TemplateToken::SingleField(ident) => {
             quote! {
-                let #field = cur_token
+                let #ident = sub
                     .parse()
-                    .map_err(|e| ::async_nats::subject::FromSubjectError::parser_err(e, stringify!(#field), cur_token))?;
+                    .map_err(|e| FromSubjectError::parser_err(e, stringify!(#ident), sub))?;
             }
         }
     };
+    let forward_subject = if let Some(_) = next {
+        quote! {
+            let subject = &subject[idx + 1..];
+        }
+    } else {
+        quote! {}
+    };
 
     Ok(quote! {
-        #increase_token_cnt
-        #current_token
-        #check_or_parse
+        #idx_and_sub
+        #parse_or_check
+        #forward_subject
     })
 }

@@ -10,7 +10,8 @@ const WHITESPACE: [char; 4] = [' ', '\t', '\n', '\r'];
 
 pub enum TemplateToken {
     Token(String),
-    Field(Ident),
+    MultiField(Ident),
+    SingleField(Ident),
 }
 
 pub struct SubjectTemplate {
@@ -47,7 +48,9 @@ impl SubjectTemplate {
             }
             match token {
                 TemplateToken::Token(token) => format_template.push_str(token),
-                TemplateToken::Field(_) => format_template.push_str("{}"),
+                TemplateToken::MultiField(_) | TemplateToken::SingleField(_) => {
+                    format_template.push_str("{}")
+                }
             }
         }
         LitStr::new(&format_template, self.span.clone())
@@ -57,7 +60,7 @@ impl SubjectTemplate {
             .iter()
             .filter_map(|t| match t {
                 TemplateToken::Token(_) => None,
-                TemplateToken::Field(ident) => {
+                TemplateToken::MultiField(ident) | TemplateToken::SingleField(ident) => {
                     let expr: Expr = parse_quote!( self.#ident );
                     Some(expr)
                 }
@@ -69,7 +72,9 @@ impl SubjectTemplate {
             .iter()
             .filter_map(|t| match t {
                 TemplateToken::Token(_) => None,
-                TemplateToken::Field(ident) => Some(ident.clone()),
+                TemplateToken::MultiField(ident) | TemplateToken::SingleField(ident) => {
+                    Some(ident.clone())
+                }
             })
             .collect()
     }
@@ -82,6 +87,12 @@ impl Parse for SubjectTemplate {
 
         let mut tokens = Vec::new();
         let template = subject_template.value();
+        if template.is_empty() {
+            return Err(syn::Error::new(
+                subject_template.span(),
+                "Empty subjects are not valid",
+            ));
+        }
         if template.starts_with('.') || template.ends_with('.') {
             return Err(syn::Error::new(
                 subject_template.span(),
@@ -93,8 +104,22 @@ impl Parse for SubjectTemplate {
             let token = match token {
                 ident if ident.starts_with("[ ") && ident.ends_with(" ]") => {
                     let ident = ident[1..ident.len() - 2].trim();
-                    valid_token(ident, subject_template.span())?;
-                    TemplateToken::Field(Ident::new(ident, subject_template.span()))
+                    match ident {
+                        ident if ident.starts_with('>') => {
+                            let ident = ident[1..].trim();
+                            valid_token(ident, subject_template.span())?;
+                            TemplateToken::MultiField(Ident::new(ident, subject_template.span()))
+                        }
+                        ident if ident.starts_with('*') => {
+                            let ident = ident[1..].trim();
+                            valid_token(ident, subject_template.span())?;
+                            TemplateToken::SingleField(Ident::new(ident, subject_template.span()))
+                        }
+                        ident => {
+                            valid_token(ident, subject_template.span())?;
+                            TemplateToken::SingleField(Ident::new(ident, subject_template.span()))
+                        }
+                    }
                 }
                 token => {
                     valid_token(token, subject_template.span())?;

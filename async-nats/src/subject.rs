@@ -52,6 +52,8 @@ pub enum FromSubjectError {
     ExpectedMoreTokens { expected: usize, got: usize },
     #[error("Expected token '{expected}' but got '{got}'")]
     TokenMismatch { expected: String, got: String },
+    #[error("Subject to short, didn't contain '{wanted}'")]
+    SubjectEndedUnexpected { wanted: String },
 }
 
 impl FromSubjectError {
@@ -418,6 +420,18 @@ impl ToSubject for String {
 impl ToSubject for str {
     fn to_subject(&self) -> Result<SubjectBuf, Error> {
         Subject::new(self)?.to_subject()
+    }
+}
+
+impl FromSubject for SubjectBuf {
+    fn from_subject(subject: &Subject) -> Result<Self, FromSubjectError> {
+        Ok(subject.to_owned())
+    }
+}
+
+impl FromSubject for String {
+    fn from_subject(subject: &Subject) -> Result<Self, FromSubjectError> {
+        Ok(subject.to_string())
     }
 }
 
