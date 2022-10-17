@@ -6,7 +6,7 @@ use crate::subject_template::{subject_attr, SubjectTemplate, TemplateToken};
 
 pub fn expand_derive_from_subject(input: &mut DeriveInput) -> Result<TokenStream> {
     let type_ident = &input.ident;
-    let sub_attr = subject_attr(&input)?;
+    let sub_attr = subject_attr(input)?;
     let subject_template = sub_attr.parse_args::<SubjectTemplate>()?;
 
     let mut token_checks = TokenStream::new();
@@ -95,7 +95,7 @@ fn check_or_parse(token: &TemplateToken, next: Option<&TemplateToken>) -> Result
             }
         }
     };
-    let forward_subject = if let Some(_) = next {
+    let forward_subject = if next.is_some() {
         quote! {
             let subject = &subject[idx + 1..];
         }

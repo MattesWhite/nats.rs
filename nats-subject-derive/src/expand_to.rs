@@ -6,7 +6,7 @@ use crate::subject_template::{subject_attr, SubjectTemplate};
 
 pub fn expand_derive_to_subject(input: &mut DeriveInput) -> Result<TokenStream> {
     let type_ident = &input.ident;
-    let sub_attr = subject_attr(&input)?;
+    let sub_attr = subject_attr(input)?;
     let subject_template = sub_attr.parse_args::<SubjectTemplate>()?;
     let format_string = subject_template.format_template();
     let format_args = subject_template.format_args();

@@ -53,7 +53,7 @@ impl SubjectTemplate {
                 }
             }
         }
-        LitStr::new(&format_template, self.span.clone())
+        LitStr::new(&format_template, self.span)
     }
     pub fn format_args(&self) -> Punctuated<Expr, Token![,]> {
         self.tokens()
