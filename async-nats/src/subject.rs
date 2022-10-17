@@ -33,8 +33,45 @@ macro_rules! subj {
     };
 }
 
+/// Errors parsing a type from a [`Subject`].
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum FromSubjectError {
+    /// Parsing one of the tokens failed.
+    #[error("Failed to parse '{token}' for {field}")]
+    ParsingFailed {
+        /// The actual error that happened.
+        #[source]
+        err: Box<dyn std::error::Error + Send + Sync>,
+        /// The field the token should be parsed for.
+        field: String,
+        /// The value that was tried to parse.
+        token: String,
+    },
+    #[error("Expected at least {expected} tokens but only got {got}")]
+    ExpectedMoreTokens { expected: usize, got: usize },
+    #[error("Expected token '{expected}' but got '{got}'")]
+    TokenMismatch { expected: String, got: String },
+    #[error("Subject to short, didn't contain '{wanted}'")]
+    SubjectEndedUnexpected { wanted: String },
+}
+
+impl FromSubjectError {
+    pub fn parser_err<E>(err: E, field: &str, token: &str) -> Self
+    where
+        E: 'static + std::error::Error + Send + Sync,
+    {
+        Self::ParsingFailed {
+            err: Box::new(err),
+            field: field.to_string(),
+            token: token.to_string(),
+        }
+    }
+}
+
 /// Errors validating a NATS subject.
-#[derive(Debug, Copy, Clone, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     /// One of the [`Subject`]'s token is invalid.
     #[error("NATS subjects's tokens are not allowed to be empty or to contain spaces or dots")]
@@ -49,6 +86,8 @@ pub enum Error {
     /// [`Subject`].
     #[error("Could not join on a subject ending with the multi wildcard")]
     CanNotJoin,
+    #[error(transparent)]
+    FailedToParse(#[from] FromSubjectError),
 }
 
 impl From<Error> for io::Error {
@@ -57,8 +96,14 @@ impl From<Error> for io::Error {
     }
 }
 
+/// Implementors can create a [`Subject`] representation of themselves.
 pub trait ToSubject {
     fn to_subject(&self) -> Result<SubjectBuf, Error>;
+}
+
+/// An instance can be parsed from a [`Subject`].
+pub trait FromSubject: Sized {
+    fn from_subject(subject: &Subject) -> Result<Self, FromSubjectError>;
 }
 
 /// A valid NATS subject.
@@ -375,6 +420,18 @@ impl ToSubject for String {
 impl ToSubject for str {
     fn to_subject(&self) -> Result<SubjectBuf, Error> {
         Subject::new(self)?.to_subject()
+    }
+}
+
+impl FromSubject for SubjectBuf {
+    fn from_subject(subject: &Subject) -> Result<Self, FromSubjectError> {
+        Ok(subject.to_owned())
+    }
+}
+
+impl FromSubject for String {
+    fn from_subject(subject: &Subject) -> Result<Self, FromSubjectError> {
+        Ok(subject.to_string())
     }
 }
 
