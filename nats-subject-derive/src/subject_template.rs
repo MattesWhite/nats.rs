@@ -8,6 +8,7 @@ use syn::{
 
 const WHITESPACE: [char; 4] = [' ', '\t', '\n', '\r'];
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum TemplateToken {
     Token(String),
     MultiField(Ident),
@@ -85,49 +86,8 @@ impl Parse for SubjectTemplate {
         let span = input.span();
         let subject_template: LitStr = input.parse()?;
 
-        let mut tokens = Vec::new();
-        let template = subject_template.value();
-        if template.is_empty() {
-            return Err(syn::Error::new(
-                subject_template.span(),
-                "Empty subjects are not valid",
-            ));
-        }
-        if template.starts_with('.') || template.ends_with('.') {
-            return Err(syn::Error::new(
-                subject_template.span(),
-                "The subject template does not represent a valid subject",
-            ));
-        }
-
-        for token in template.split_terminator('.') {
-            let token = match token {
-                ident if ident.starts_with("[ ") && ident.ends_with(" ]") => {
-                    let ident = ident[1..ident.len() - 2].trim();
-                    match ident {
-                        ident if ident.starts_with('>') => {
-                            let ident = ident[1..].trim();
-                            valid_token(ident, subject_template.span())?;
-                            TemplateToken::MultiField(Ident::new(ident, subject_template.span()))
-                        }
-                        ident if ident.starts_with('*') => {
-                            let ident = ident[1..].trim();
-                            valid_token(ident, subject_template.span())?;
-                            TemplateToken::SingleField(Ident::new(ident, subject_template.span()))
-                        }
-                        ident => {
-                            valid_token(ident, subject_template.span())?;
-                            TemplateToken::SingleField(Ident::new(ident, subject_template.span()))
-                        }
-                    }
-                }
-                token => {
-                    valid_token(token, subject_template.span())?;
-                    TemplateToken::Token(token.to_string())
-                }
-            };
-            tokens.push(token);
-        }
+        let tokens =
+            parse_subject_template_literal(&subject_template.value(), subject_template.span())?;
 
         Ok(Self { span, tokens })
     }
@@ -141,5 +101,71 @@ fn valid_token(token: &str, span: Span) -> Result<()> {
         ))
     } else {
         Ok(())
+    }
+}
+
+fn parse_subject_template_literal(template: &str, span: Span) -> Result<Vec<TemplateToken>> {
+    let mut tokens = Vec::new();
+    if template.is_empty() {
+        return Err(syn::Error::new(span, "Empty subjects are not valid"));
+    }
+    if template.starts_with('.') || template.ends_with('.') {
+        return Err(syn::Error::new(
+            span,
+            "The subject template does not represent a valid subject",
+        ));
+    }
+
+    for token in template.split_terminator('.') {
+        let token = match token {
+            ident if ident.starts_with("[ ") && ident.ends_with(" ]") => {
+                let ident = ident[1..ident.len() - 2].trim();
+                match ident {
+                    ident if ident.starts_with('>') => {
+                        let ident = ident[1..].trim();
+                        valid_token(ident, span)?;
+                        TemplateToken::MultiField(Ident::new(ident, span))
+                    }
+                    ident if ident.starts_with('*') => {
+                        let ident = ident[1..].trim();
+                        valid_token(ident, span)?;
+                        TemplateToken::SingleField(Ident::new(ident, span))
+                    }
+                    ident => {
+                        valid_token(ident, span)?;
+                        TemplateToken::SingleField(Ident::new(ident, span))
+                    }
+                }
+            }
+            token => {
+                valid_token(token, span)?;
+                TemplateToken::Token(token.to_string())
+            }
+        };
+        tokens.push(token);
+    }
+
+    Ok(tokens)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_parse_leading_multi_wildcard_token() {
+        let template = "[ > prefix ].api.[ number ].[ > rest ]";
+        let tokens = parse_subject_template_literal(template, Span::call_site()).unwrap();
+        assert_eq!(tokens.len(), 4);
+        assert!(
+            matches!(&tokens[0], TemplateToken::MultiField(ident) if ident.to_string() == "prefix")
+        );
+        assert!(matches!(&tokens[1], TemplateToken::Token(token) if token == "api"));
+        assert!(
+            matches!(&tokens[2], TemplateToken::SingleField(ident) if ident.to_string() == "number")
+        );
+        assert!(
+            matches!(&tokens[3], TemplateToken::MultiField(ident) if ident.to_string() == "rest")
+        );
     }
 }

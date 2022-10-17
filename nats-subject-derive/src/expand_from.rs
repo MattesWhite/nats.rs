@@ -48,13 +48,13 @@ fn check_or_parse(token: &TemplateToken, next: Option<&TemplateToken>) -> Result
         ) => {
             return Err(syn::Error::new(
                 ident.span(),
-                "Multi-field placeholders next to each other are indistinguishable",
+                "Multi-field placeholders followed by other placeholders are indistinguishable",
             ));
         }
         (TemplateToken::MultiField(_), Some(TemplateToken::Token(token))) => {
             let pattern = format!(".{token}.");
             quote! {
-                idx = subject.rfind(#pattern).ok_or_else(|| ::async_nats::subject::FromSubjectError::SubjectEndedUnexpected {
+                idx = subject.find(#pattern).ok_or_else(|| ::async_nats::subject::FromSubjectError::SubjectEndedUnexpected {
                     wanted: #token.to_string(),
                 })?;
                 let sub = &subject[..idx];
@@ -63,7 +63,7 @@ fn check_or_parse(token: &TemplateToken, next: Option<&TemplateToken>) -> Result
         (TemplateToken::SingleField(_) | TemplateToken::Token(_), Some(_)) => {
             quote! {
                 idx = subject
-                    .rfind('.')
+                    .find('.')
                     .ok_or_else(|| ::async_nats::subject::FromSubjectError::SubjectEndedUnexpected {
                         wanted: ".".to_string(),
                     })?;
